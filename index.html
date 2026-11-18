@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Powerfood">
+<meta name="theme-color" content="#2f7d4f">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
 <title>MAG Powerfood Checklist</title>
 <style>
 :root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1b;--muted:#6b6a65;--line:#e3e1da;--accent:#2f7d4f;--accent2:#d9eee1;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -33,6 +41,11 @@ button.on{background:var(--accent2);border-color:var(--accent)}
 .item.open .for{display:block}
 .more{font-size:.78rem;color:var(--muted);margin-top:4px;text-decoration:underline}
 .empty{text-align:center;color:var(--muted);padding:30px}
+.amt{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.amt button{padding:4px 12px;min-width:40px;font-size:1rem}
+.amt input{width:64px;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit;text-align:center}
+.item{cursor:default}
+.cb{cursor:pointer}
 .win{display:none;text-align:center;font-weight:700;color:var(--accent);padding:8px}
 </style>
 </head>
@@ -41,7 +54,8 @@ button.on{background:var(--accent2);border-color:var(--accent)}
 <div class="top">
 <h1>MAG Powerfood Crafting – Shopping List</h1>
 <div class="bar"><i id="fill"></i></div>
-<div class="stats"><span><b id="n1">0</b> / <span id="n2">0</span> ingredients</span><span><b id="u1">0</b> / <span id="u2">0</span> units</span><span><b id="pc">0</b>%</span></div>
+<div class="stats"><span><b id="n1">0</b> / <span id="n2">0</span> ingredients</span><span><b id="u1">0</b> / <span id="u2">0</span> units</span><span><b id="m1">0</b> / <span id="m2">0</span> meals</span><span><b id="pc">0</b>%</span></div>
+<div class="ctl" style="margin-bottom:8px"><button id="tI" class="on" style="flex:1">Ingredients</button><button id="tM" style="flex:1">Meals</button></div>
 <div class="ctl">
 <input type="search" id="q" placeholder="Search ingredient or dish…">
 <button id="hide">Hide done</button>
@@ -96,16 +110,42 @@ const D=[
 [1,"Canned Peaches","can","Wobbly Delight with Peaches"],
 [1,"Bear Steak","steak","Bear Sausage"]
 ];
-const KEY="mag-powerfood-done-v1";
-let done=new Set(),hideDone=false,open=new Set(),term="";
-try{const s=localStorage.getItem(KEY);if(s)done=new Set(JSON.parse(s))}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify([...done]))}catch(e){}}
+const KEY="mag-powerfood-have-v2";
+let have={},hideDone=false,open=new Set(),term="",tab="I",made=new Set();
+const MEALS=[...new Set(D.flatMap(d=>d[3].split(", ")))];
+const MK="mag-powerfood-meals-v1";
+try{const s=localStorage.getItem(MK);if(s)made=new Set(JSON.parse(s))}catch(e){}
+function saveM(){try{localStorage.setItem(MK,JSON.stringify([...made]))}catch(e){}}
+function toggleM(m){made.has(m)?made.delete(m):made.add(m);saveM();render()}
+try{const s=localStorage.getItem(KEY);if(s)have=JSON.parse(s)||{}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(have))}catch(e){}}
+function set(i,v){v=Math.max(0,Math.min(D[i][0],v|0));if(v)have[i]=v;else delete have[i];save();render()}
 const $=id=>document.getElementById(id);
+function renderM(){
+const L=$("list");L.innerHTML="";const t=term.toLowerCase();let shown=0;
+MEALS.forEach(m=>{
+const ing=D.filter(d=>d[3].split(", ").includes(m));
+const isMade=made.has(m);
+if(hideDone&&isMade)return;
+if(t&&!(m.toLowerCase().includes(t)||ing.some(d=>d[1].toLowerCase().includes(t))))return;
+shown++;
+const el=document.createElement("div");el.className="item"+(isMade?" done":"");el.style.cursor="pointer";
+const cb=document.createElement("div");cb.className="cb";cb.textContent=isMade?"✓":"";
+const body=document.createElement("div");body.style.flex="1";body.style.minWidth="0";
+const nm=document.createElement("div");nm.className="nm";nm.style.fontWeight="600";nm.textContent=m;
+const f=document.createElement("div");f.className="for";f.style.display="block";
+f.textContent=ing.map(d=>((have[D.indexOf(d)]||0)>=d[0]?"✓ ":"")+d[1]).join(", ");
+body.append(nm,f);el.append(cb,body);el.onclick=()=>toggleM(m);L.append(el);
+});
+if(!shown){L.innerHTML='<div class="empty">Nothing to show.</div>'}
+stats();
+}
 function render(){
+if(tab==="M")return renderM();
 const L=$("list");L.innerHTML="";
 const t=term.toLowerCase();let shown=0;
 D.forEach((d,i)=>{
-const isDone=done.has(i);
+const h=have[i]||0,isDone=h>=d[0];
 if(hideDone&&isDone)return;
 if(t&&!(d[1].toLowerCase().includes(t)||d[3].toLowerCase().includes(t)))return;
 shown++;
@@ -119,23 +159,34 @@ nm.querySelector(".nm").textContent=d[1];nm.querySelector(".unit").textContent="
 const more=document.createElement("div");more.className="more";more.textContent=open.has(i)?"hide dishes":"show dishes";
 const f=document.createElement("div");f.className="for";f.textContent="Needed for: "+d[3];
 more.onclick=e=>{e.stopPropagation();open.has(i)?open.delete(i):open.add(i);render()};
-body.append(nm,more,f);el.append(cb,body);
-el.onclick=()=>{done.has(i)?done.delete(i):done.add(i);save();render()};
+const ctl=document.createElement("div");ctl.className="amt";
+const mk=(t,fn)=>{const b=document.createElement("button");b.textContent=t;b.onclick=e=>{e.stopPropagation();fn()};return b};
+const inp=document.createElement("input");inp.type="number";inp.min=0;inp.max=d[0];inp.inputMode="numeric";inp.value=h;inp.onchange=()=>set(i,parseInt(inp.value)||0);
+const of=document.createElement("span");of.className="unit";of.textContent="/ "+d[0];
+ctl.append(mk("−",()=>set(i,h-1)),inp,of,mk("+",()=>set(i,h+1)),mk("All",()=>set(i,d[0])));
+body.append(nm,ctl,more,f);el.append(cb,body);
+cb.onclick=()=>set(i,isDone?0:d[0]);
 L.append(el);
 });
 if(!shown){L.innerHTML='<div class="empty">Nothing to show.</div>'}
-let u=0,tot=0;D.forEach((d,i)=>{tot+=d[0];if(done.has(i))u+=d[0]});
+stats();
+}
+function stats(){
+let u=0,tot=0;D.forEach((d,i)=>{tot+=d[0];u+=Math.min(have[i]||0,d[0])});
 const p=Math.round(u/tot*100);
-$("n1").textContent=done.size;$("n2").textContent=D.length;
+const nd=D.filter((d,i)=>(have[i]||0)>=d[0]).length;$("n1").textContent=nd;$("n2").textContent=D.length;
 $("u1").textContent=u;$("u2").textContent=tot;$("pc").textContent=p;
-$("fill").style.width=p+"%";
-$("win").style.display=done.size===D.length?"block":"none";
+$("fill").style.width=p+"%";$("m1").textContent=made.size;$("m2").textContent=MEALS.length;
+$("win").style.display=nd===D.length?"block":"none";
 $("hide").classList.toggle("on",hideDone);
 }
 $("q").oninput=e=>{term=e.target.value;render()};
 $("hide").onclick=()=>{hideDone=!hideDone;render()};
-$("reset").onclick=()=>{if(done.size&&confirm("Clear all ticks?")){done.clear();save();render()}};
+$("reset").onclick=()=>{if((Object.keys(have).length||made.size)&&confirm("Clear all amounts and meals?")){have={};made=new Set();save();saveM();render()}};
+$("tI").onclick=()=>{tab="I";$("tI").classList.add("on");$("tM").classList.remove("on");render()};
+$("tM").onclick=()=>{tab="M";$("tM").classList.add("on");$("tI").classList.remove("on");render()};
 render();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
 </script>
 </body>
 </html>
